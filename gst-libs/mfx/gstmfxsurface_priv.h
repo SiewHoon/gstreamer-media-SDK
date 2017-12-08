@@ -53,6 +53,7 @@ struct _GstMfxSurfacePrivate
   guint16 pitches[3];
   gboolean mapped;
   gboolean has_video_memory;
+  guint queued;
 };
 
 struct _GstMfxSurface

@@ -202,6 +202,7 @@ gst_mfx_surface_init (GstMfxSurface * surface)
   GstMfxSurfacePrivate *const priv =
       gst_mfx_surface_get_instance_private (surface);
 
+  priv->queued = 0;
   priv->surface_id = GST_MFX_ID_INVALID;
   surface->priv = priv;
 }
@@ -482,4 +483,28 @@ gst_mfx_surface_unmap (GstMfxSurface * surface)
       klass->unmap (surface);
       priv->mapped = FALSE;
     }
+}
+
+gboolean
+gst_mfx_surface_is_queued (GstMfxSurface * surface)
+{
+  if (!surface)
+    return FALSE;
+
+  return g_atomic_int_get (&GST_MFX_SURFACE_GET_PRIVATE (surface)->queued) ?
+      TRUE : FALSE;
+}
+
+void
+gst_mfx_surface_queue (GstMfxSurface * surface)
+{
+  if (surface)
+    g_atomic_int_set (&GST_MFX_SURFACE_GET_PRIVATE (surface)->queued, 1);
+}
+
+void
+gst_mfx_surface_dequeue (GstMfxSurface * surface)
+{
+  if (surface)
+    g_atomic_int_set (&GST_MFX_SURFACE_GET_PRIVATE (surface)->queued, 0);
 }
