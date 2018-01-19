@@ -78,6 +78,11 @@ gst_mfx_task_frame_alloc (mfxHDL pthis, mfxFrameAllocRequest * request,
   else
     response_data->num_surfaces = priv->request.NumFrameSuggested;
 
+  if ((gst_mfx_task_has_type (task, GST_MFX_TASK_DECODER)) &&
+      info->Width < 1281 && info->Height < 721 &&
+      info->FrameRateExtN > 50)
+    response_data->num_surfaces += 5;
+
   num_surfaces = response_data->num_surfaces;
 
   response_data->mem_ids =
