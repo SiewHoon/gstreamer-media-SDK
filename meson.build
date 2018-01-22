@@ -80,6 +80,7 @@ gstpbutils_dep = dependency('gstreamer-pbutils-1.0', version: gst_req,
   fallback : ['gst-plugins-base', 'gstpbutils_dep'], required: false)
   
 gst_mfx_deps += [gst_dep, gstvideo_dep, gstallocators_dep]
+gst_mfx_deps += cc.find_library('gstcodecparsers-1.0')
 
 with_pbutils = false
 if gstpbutils_dep.found()

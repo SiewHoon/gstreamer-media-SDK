@@ -96,5 +96,8 @@ gst_mfx_decoder_decode (GstMfxDecoder * decoder, GstVideoCodecFrame * frame);
 GstMfxDecoderStatus
 gst_mfx_decoder_flush (GstMfxDecoder * decoder);
 
+gboolean
+gst_mfx_decoder_need_sync_surface(GstMfxDecoder * decoder);
+
 G_END_DECLS
 #endif /* GST_MFX_DECODER_H */

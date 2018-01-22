@@ -20,6 +20,7 @@
 
 #include <mfxplugin.h>
 #include <mfxvp8.h>
+#include <gst/codecparsers/gsth264parser.h>
 
 #include "gstmfxdecoder.h"
 #include "gstmfxfilter.h"
@@ -63,6 +64,7 @@ struct _GstMfxDecoder
   gboolean skip_corrupted_frames;
   gboolean is_autoplugged;
   gboolean can_double_deinterlace;
+  gboolean sync_out_surf;
   guint num_partial_frames;
   guint initial_frame_latency;
   guint num_frame_latency;
@@ -375,6 +377,7 @@ gst_mfx_decoder_init (GstMfxDecoder * decoder)
 {
   decoder->configured = FALSE;
   decoder->inited = FALSE;
+  decoder->sync_out_surf = FALSE;
   decoder->pts_offset = GST_CLOCK_TIME_NONE;
 
   g_queue_init (&decoder->input_frames);
@@ -532,7 +535,19 @@ gst_mfx_decoder_prepare (GstMfxDecoder * decoder)
   GstVideoCodecFrame *cur_frame = NULL;
   GstMapInfo minfo = { 0 };
   guint i = 0;
+  guint8 sps_data[128], pps_data[128];
   mfxStatus sts = MFX_ERR_NONE;
+
+  mfxExtCodingOptionSPSPPS extradata = {
+    .Header.BufferId = MFX_EXTBUFF_CODING_OPTION_SPSPPS,
+    .Header.BufferSz = sizeof (extradata),
+    .SPSBuffer = sps_data,.SPSBufSize = sizeof (sps_data),
+    .PPSBuffer = pps_data,.PPSBufSize = sizeof (pps_data)
+  };
+
+  mfxExtBuffer *ext_buffers[] = {
+    (mfxExtBuffer *) & extradata,
+  };
 
   do {
     if (MFX_CODEC_VC1 == decoder->profile.codec
@@ -558,8 +573,42 @@ gst_mfx_decoder_prepare (GstMfxDecoder * decoder)
       }
     }
 
+    if(MFX_CODEC_AVC == decoder->params.mfx.CodecId) {
+      decoder->params.ExtParam = ext_buffers;
+      decoder->params.NumExtParam = 1;
+    }
+
     sts = MFXVideoDECODE_DecodeHeader (decoder->session, &decoder->bs,
         &decoder->params);
+
+    if(MFX_CODEC_AVC == decoder->params.mfx.CodecId && extradata.SPSBufSize) {
+
+      /* Check the number of maximum reference frame in SPS. If it is too
+       * high, will need to sync the output surface to avoid surface
+       * overwrite
+       */
+      GstH264NalUnit nalu;
+      GstH264SPS sps;
+
+      memset(&nalu, 0, sizeof(nalu));
+      nalu.sc_offset = 0;
+      nalu.offset = 4;
+      nalu.data =  extradata.SPSBuffer;
+      nalu.size = extradata.SPSBufSize;
+      nalu.idr_pic_flag = 0;
+      nalu.header_bytes = 1;
+
+    if (GST_H264_PARSER_OK == gst_h264_parse_sps(&nalu, &sps, TRUE))
+      if (sps.vui_parameters_present_flag && sps.vui_parameters.max_dec_frame_buffering == 16)
+        decoder->sync_out_surf = TRUE;
+
+      /* MFX_EXTBUFF_CODING_OPTION_SPSPPS is not supported by mfxVideoDecode_init() API
+       * Hence, we have to detacth the EXTBUFF before mfxVideoDecode_init() is called.
+       */
+      decoder->params.ExtParam = NULL;
+      decoder->params.NumExtParam = 0;
+    }
+
     if (MFX_ERR_NONE == sts) {
       ret = GST_MFX_DECODER_STATUS_CONFIGURED;
       break;
@@ -974,4 +1023,10 @@ gst_mfx_decoder_flush (GstMfxDecoder * decoder)
     ret = GST_MFX_DECODER_STATUS_FLUSHED;
   }
   return ret;
+}
+
+gboolean
+gst_mfx_decoder_need_sync_surface_out (GstMfxDecoder * decoder)
+{
+  return decoder->sync_out_surf;
 }
